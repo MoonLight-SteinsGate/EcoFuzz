@@ -3343,8 +3343,8 @@ static u8 save_if_interesting(char** argv, void* mem, u32 len, u8 fault) {
 
     queue_top->exec_cksum = cksum;
 
-    /* Try to calibrate inline; this also calls update_bitmap_score() when
-       successful. */
+        /* Try to calibrate inline; this also calls update_bitmap_score() when
+           successful. */
 
     res = calibrate_case(argv, queue_top, mem, queue_cycle - 1, 0);
 
@@ -5176,7 +5176,7 @@ static u8 fuzz_one(char** argv) {
   s32 len, fd, temp_len, i, j;
   u8  *in_buf, *out_buf, *orig_in, *ex_tmp, *eff_map = 0;
   u64 havoc_queued,  orig_hit_cnt, new_hit_cnt, last_mutation_num = 0, energy, energy_in_det = 0, start_record, end_record, record_time;
-  u32 splice_cycle = 0, perf_score = 100, orig_perf, prev_cksum, eff_cnt = 1, last_queued_paths = queued_paths, record_num = 0;
+  u32 splice_cycle = 0, perf_score = 100, orig_perf, prev_cksum, eff_cnt = 1, last_queued_paths = queued_paths, record_num = 0, average_cost = 0;
   struct queue_entry* q = queue;
 
   u8  ret_val = 1, doing_det = 0, ret_of_fuzz, skip_havoc = 0;;
@@ -5287,34 +5287,43 @@ static u8 fuzz_one(char** argv) {
    *********************/
 
   orig_perf = perf_score = calculate_score(queue_cur);
+  if(queued_paths == queued_paths_initial)
+    average_cost = total_fuzz / queued_paths;
+  else
+    average_cost = total_fuzz / (queued_paths - queued_paths_initial);
+
+  if(average_cost == 0)
+    average_cost = 1024;
 
   if(state_of_fuzz == 2){
     queue_cur->state = 2;
     if(queue_cur->last_found == 0){
-      energy = MIN(2 * queue_cur->last_energy, 16 * total_fuzz/queued_paths);
+      energy = MIN(2 * queue_cur->last_energy, 16 * average_cost);
     }
     else{
-      energy = MIN(queue_cur->last_energy, 16 * total_fuzz/queued_paths);
+      energy = MIN(queue_cur->last_energy, 16 * average_cost);
     }
     if(energy == 0){
-      if(queue_cur->exec_num > total_fuzz/queued_paths)
-        energy = total_fuzz/queued_paths/4;
-      else if(queue_cur->exec_num > total_fuzz/queued_paths/2)
-        energy = total_fuzz/queued_paths/2;
+      if(queue_cur->exec_num > average_cost)
+        energy = average_cost/4;
+      else if(queue_cur->exec_num > average_cost/2)
+        energy = average_cost/2;
       else
-        energy = total_fuzz/queued_paths;
+        energy = average_cost;
       }
     energy = energy * rate;
   }
   else{
-    if(queue_cur->exec_num > total_fuzz/queued_paths)
-      energy = total_fuzz/queued_paths/4;
-    else if(queue_cur->exec_num > total_fuzz/queued_paths/2)
-      energy = total_fuzz/queued_paths/2;
+    if(queue_cur->exec_num > average_cost)
+      energy = average_cost/4;
+    else if(queue_cur->exec_num > average_cost/2)
+      energy = average_cost/2;
     else
-      energy = total_fuzz/queued_paths;
+      energy = average_cost;
     energy = energy * rate;
   }
+    
+    goto havoc_stage;
 
   /* Skip right away if -d is given, if we have done deterministic fuzzing on
      this entry ourselves (was_fuzzed), or if it has gone through deterministic
